@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>카페브릿지 관리자 페이지</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Pretendard Font -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f3f4f6; /* bg-gray-100 */
+        }
+        .hidden { display: none !important; }
+        
+        /* Custom scrollbar for table */
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        .table-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased h-screen flex flex-col">
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="fixed inset-0 bg-gray-100 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full text-center border border-gray-200">
+            <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-700">
+                <i data-lucide="lock" class="w-8 h-8"></i>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">관리자 로그인</h2>
+            <p class="text-gray-500 mb-6 text-sm">관리자 비밀번호를 입력해주세요.</p>
+            
+            <form id="login-form" class="space-y-4">
+                <input type="password" id="password-input" placeholder="비밀번호" required
+                    class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-800 focus:border-gray-800 outline-none transition-shadow text-center">
+                <p id="login-error" class="text-red-500 text-sm hidden font-medium">비밀번호가 일치하지 않습니다.</p>
+                <button type="submit" 
+                    class="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-colors shadow-md">
+                    접속하기
+                </button>
+            </form>
+            <div class="mt-4 text-xs text-gray-400">
+                * 초기 비밀번호: cafebridge2026<br/>
+                * 실제 서비스 시 소스코드 내 비밀번호 변경 필요
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard (Hidden by default) -->
+    <div id="dashboard" class="hidden flex-col h-full">
+        <!-- Top Navbar -->
+        <nav class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="bg-gray-900 p-2 rounded-lg text-white">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                </div>
+                <h1 class="font-bold text-xl tracking-tight">카페브릿지 사전예약 관리</h1>
+            </div>
+            <div class="flex gap-3">
+                <button id="refresh-btn" class="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span>새로고침</span>
+                </button>
+                <button id="download-btn" class="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors shadow-sm">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>CSV 다운로드</span>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto p-6">
+            <div class="max-w-7xl mx-auto space-y-6">
+                
+                <!-- Metrics Row -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 mb-1">총 사전예약</p>
+                            <h3 id="metric-total" class="text-3xl font-bold text-gray-900">-</h3>
+                        </div>
+                        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
+                            <i data-lucide="users" class="w-6 h-6"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 mb-1">오늘 신규 (자정 기준)</p>
+                            <h3 id="metric-today" class="text-3xl font-bold text-green-600">-</h3>
+                        </div>
+                        <div class="w-12 h-12 bg-green-50 text-green-600 rounded-full flex items-center justify-center">
+                            <i data-lucide="user-plus" class="w-6 h-6"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 mb-1">이번 주 신규 (월~일)</p>
+                            <h3 id="metric-week" class="text-3xl font-bold text-purple-600">-</h3>
+                        </div>
+                        <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center">
+                            <i data-lucide="trending-up" class="w-6 h-6"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Row -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                    <h3 class="font-bold text-lg text-gray-900 mb-4 flex items-center gap-2">
+                        <i data-lucide="pie-chart" class="w-5 h-5 text-gray-500"></i> 유입 경로 분석
+                    </h3>
+                    <div id="chart-container" class="space-y-4">
+                        <!-- Chart bars will be injected here -->
+                        <div class="text-center text-gray-400 py-4 text-sm">데이터를 불러오는 중입니다...</div>
+                    </div>
+                </div>
+
+                <!-- Table Row -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                    <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
+                        <h3 class="font-bold text-lg text-gray-900 flex items-center gap-2">
+                            <i data-lucide="list" class="w-5 h-5 text-gray-500"></i> 전체 예약자 목록
+                        </h3>
+                    </div>
+                    <div class="table-container overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-[800px]">
+                            <thead>
+                                <tr class="bg-gray-50 text-gray-500 text-sm border-b border-gray-200">
+                                    <th class="py-4 px-6 font-semibold w-16">No.</th>
+                                    <th class="py-4 px-6 font-semibold">이름 (상호명)</th>
+                                    <th class="py-4 px-6 font-semibold">이메일</th>
+                                    <th class="py-4 px-6 font-semibold">유입 경로</th>
+                                    <th class="py-4 px-6 font-semibold w-48">등록 일시</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-body" class="text-gray-700">
+                                <!-- Table rows will be injected here -->
+                                <tr>
+                                    <td colspan="5" class="text-center py-8 text-gray-400">데이터를 불러오는 중입니다...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Full screen loading overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white/80 backdrop-blur-sm z-40 hidden items-center justify-center">
+        <div class="flex flex-col items-center">
+            <i data-lucide="loader-2" class="w-10 h-10 animate-spin text-gray-900 mb-4"></i>
+            <p class="text-gray-600 font-medium">데이터를 불러오는 중입니다...</p>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // ----------------------------------------------------
+        // Configuration
+        // ----------------------------------------------------
+        const ADMIN_PASSWORD = 'cafebridge2026';
+        
+        // Supabase Init (Same as index.html)
+        const supabaseUrl = 'https://weebqjnwtuvrrlvnyfir.supabase.co';
+        const supabaseKey = 'sb_publishable_Tk2o7IfXnK47FRBUKOeAcA_2lJ9nCIW';
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+        let waitlistData = []; // Store fetched data
+
+        // Source translation mapping
+        const sourceMap = {
+            'instagram': '인스타그램/SNS',
+            'search': '포털 검색',
+            'community': '카페 사장님 커뮤니티',
+            'referral': '지인 추천',
+            'other': '기타'
+        };
+
+        // Colors for chart
+        const colors = ['bg-blue-500', 'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-gray-400'];
+
+        // ----------------------------------------------------
+        // Login Logic
+        // ----------------------------------------------------
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const input = document.getElementById('password-input').value;
+            const errorEl = document.getElementById('login-error');
+            
+            if (input === ADMIN_PASSWORD) {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                document.getElementById('dashboard').classList.add('flex');
+                fetchData();
+            } else {
+                errorEl.classList.remove('hidden');
+                // Shake effect
+                const form = document.getElementById('login-form');
+                form.classList.add('animate-pulse');
+                setTimeout(() => form.classList.remove('animate-pulse'), 500);
+            }
+        });
+
+        // ----------------------------------------------------
+        // Data Fetching & Processing
+        // ----------------------------------------------------
+        async function fetchData() {
+            showLoading(true);
+            try {
+                // Fetch all data ordered by created_at descending
+                const { data, error } = await supabaseClient
+                    .from('waitlist')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+                
+                waitlistData = data || [];
+                
+                updateMetrics();
+                updateChart();
+                updateTable();
+                
+            } catch (error) {
+                console.error("데이터 로드 실패:", error);
+                alert("데이터를 불러오는데 실패했습니다. Supabase RLS 정책 설정(SELECT 허용)을 확인해주세요.\n상세: " + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // ----------------------------------------------------
+        // UI Updates
+        // ----------------------------------------------------
+        function updateMetrics() {
+            const now = new Date();
+            
+            // Today logic (00:00:00 to now)
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            
+            // This week logic (Monday as start of week)
+            const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1; // 0=Mon, 6=Sun
+            const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek).getTime();
+
+            let todayCount = 0;
+            let weekCount = 0;
+
+            waitlistData.forEach(item => {
+                const itemTime = new Date(item.created_at).getTime();
+                if (itemTime >= startOfToday) todayCount++;
+                if (itemTime >= startOfWeek) weekCount++;
+            });
+
+            // Animate numbers (simple implementation)
+            document.getElementById('metric-total').textContent = waitlistData.length.toLocaleString() + '명';
+            document.getElementById('metric-today').textContent = '+' + todayCount.toLocaleString();
+            document.getElementById('metric-week').textContent = '+' + weekCount.toLocaleString();
+        }
+
+        function updateChart() {
+            const container = document.getElementById('chart-container');
+            if (waitlistData.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">데이터가 없습니다.</div>';
+                return;
+            }
+
+            // Count sources
+            const counts = {};
+            waitlistData.forEach(item => {
+                const s = item.source || 'other';
+                counts[s] = (counts[s] || 0) + 1;
+            });
+
+            // Convert to array and sort by count desc
+            const sortedSources = Object.entries(counts)
+                .sort((a, b) => b[1] - a[1]);
+
+            let html = '';
+            sortedSources.forEach((entry, index) => {
+                const [sourceKey, count] = entry;
+                const percentage = Math.round((count / waitlistData.length) * 100);
+                const displayLabel = sourceMap[sourceKey] || sourceKey;
+                const colorClass = colors[index % colors.length];
+
+                html += `
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="font-medium text-gray-700">${displayLabel}</span>
+                            <span class="text-gray-500 font-medium">${count}명 <span class="text-xs text-gray-400">(${percentage}%)</span></span>
+                        </div>
+                        <div class="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                            <div class="${colorClass} h-2.5 rounded-full transition-all duration-1000" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function updateTable() {
+            const tbody = document.getElementById('table-body');
+            if (waitlistData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-gray-400">데이터가 없습니다.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            waitlistData.forEach((item, index) => {
+                // Format Date
+                const date = new Date(item.created_at);
+                const formattedDate = `${date.getFullYear()}.${String(date.getMonth()+1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                
+                const displaySource = sourceMap[item.source] || item.source;
+
+                html += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td class="py-4 px-6 text-sm text-gray-500">${waitlistData.length - index}</td>
+                        <td class="py-4 px-6 font-medium text-gray-900">${escapeHtml(item.name)}</td>
+                        <td class="py-4 px-6 text-gray-600">${escapeHtml(item.email)}</td>
+                        <td class="py-4 px-6">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                ${displaySource}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-sm text-gray-500">${formattedDate}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        // ----------------------------------------------------
+        // Utilities & Events
+        // ----------------------------------------------------
+        function showLoading(show) {
+            const el = document.getElementById('loading-overlay');
+            if (show) {
+                el.classList.remove('hidden');
+                el.classList.add('flex');
+            } else {
+                el.classList.add('hidden');
+                el.classList.remove('flex');
+            }
+        }
+
+        function escapeHtml(unsafe) {
+            if(!unsafe) return '';
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        // Refresh Button
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            const icon = document.querySelector('#refresh-btn i');
+            icon.classList.add('animate-spin');
+            fetchData().then(() => {
+                setTimeout(() => icon.classList.remove('animate-spin'), 500);
+            });
+        });
+
+        // CSV Download Logic
+        document.getElementById('download-btn').addEventListener('click', () => {
+            if (waitlistData.length === 0) {
+                alert("다운로드할 데이터가 없습니다.");
+                return;
+            }
+
+            // CSV Header (BOM included for Excel UTF-8 Korean support)
+            let csvContent = "\uFEFF이름,이메일,유입경로,등록일시\n";
+            
+            // CSV Rows
+            waitlistData.forEach(item => {
+                const name = `"${(item.name || '').replace(/"/g, '""')}"`;
+                const email = `"${(item.email || '').replace(/"/g, '""')}"`;
+                const source = `"${sourceMap[item.source] || item.source || ''}"`;
+                const date = new Date(item.created_at).toLocaleString('ko-KR');
+                
+                csvContent += `${name},${email},${source},"${date}"\n`;
+            });
+
+            // Trigger download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `사전예약_명단_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+    </script>
+</body>
+</html>
